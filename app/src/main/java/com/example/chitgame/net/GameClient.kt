@@ -3,6 +3,7 @@ package com.example.chitgame.net
 import com.example.chitgame.model.*
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
@@ -22,9 +23,14 @@ class GameClient(
 ) : GameSession(SessionState(isHost = false)) {
 
     private val http = HttpClient(CIO) {
-        engine { endpoint { connectTimeout = 5_000 } }
-        install(WebSockets) { pingInterval = 15_000 }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 5_000
+        }
+        install(WebSockets) { 
+            pingInterval = 15_000 
+        }
     }
+    
     @Volatile private var ws: DefaultClientWebSocketSession? = null
     private var job: Job? = null
 
@@ -45,15 +51,13 @@ class GameClient(
                 throw ce
             } catch (e: Exception) {
                 _state.update { it.copy(phase = Phase.CLOSED, message = "Couldn't connect to $host: ${e.message}") }
-            } finally { ws = null }
+            } finally { 
+                ws = null 
+            }
         }
     }
 
     private fun sendMsg(m: ClientMsg) {
         scope.launch { runCatching { ws?.send(Frame.Text(WireJson.encodeToString(ClientMsg.serializer(), m))) } }
     }
-
-    override fun pick(chitId: Int) = sendMsg(ClientMsg.Pick(chitId))
-    override fun declare() = sendMsg(ClientMsg.Declare)
-    override fun close() { job?.cancel(); runCatching { http.close() } }
 }
